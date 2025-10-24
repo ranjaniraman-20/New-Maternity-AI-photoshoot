@@ -1,410 +1,420 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Maternity AI Photoshoot</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      background-color: #f0f4f8; /* A soft, light blue-gray background */
-    }
-    .hidden {
-      display: none;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-in {
-      animation: fadeIn 0.5s ease-in-out forwards;
-    }
-    .loader-dot {
-      animation: pulse 1.4s infinite ease-in-out both;
-    }
-    .loader-dot:nth-child(1) { animation-delay: -0.32s; }
-    .loader-dot:nth-child(2) { animation-delay: -0.16s; }
-    @keyframes pulse {
-      0%, 80%, 100% { transform: scale(0); }
-      40% { transform: scale(1.0); }
-    }
-  </style>
-  <script type="importmap">
-    {
-      "imports": {
-        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.26.0"
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maternity Muse AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+          "@google/genai": "https://esm.sh/@google/genai"
+        }
       }
-    }
-  </script>
-</head>
-<body class="bg-gray-50 font-sans text-gray-800 antialiased">
+    </script>
+  </head>
+  <body class="bg-slate-900">
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+      import React, { useState, useCallback, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { GoogleGenAI, Modality } from "@google/genai";
 
-  <main class="container mx-auto px-4 py-8 md:py-12">
-    <header class="text-center mb-10">
-      <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
-        Maternity AI Photoshoot
-      </h1>
-      <p class="mt-3 max-w-2xl mx-auto text-lg text-gray-500">
-        Create your dream maternity photos in seconds. Upload your face, pick a style, and let AI do the magic.
-      </p>
-    </header>
+      // --- TYPES (from types.ts) ---
+      interface MaternityStyle {
+        id: string;
+        name: string;
+        prompt: string;
+        thumbnail: string;
+      }
 
-    <!-- Main Form View -->
-    <div id="main-form" class="max-w-4xl mx-auto">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-        <div class="w-full">
-          <h2 class="text-2xl font-bold mb-4 text-gray-700">1. Upload Your Face</h2>
-          <div id="image-uploader-container"></div>
-        </div>
-        <div class="w-full">
-          <h2 class="text-2xl font-bold mb-4 text-gray-700">2. Select a Style</h2>
-          <div id="style-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-4"></div>
-        </div>
-      </div>
+      interface UploadedImage {
+        base64: string;
+        mimeType: string;
+        previewUrl: string;
+      }
 
-      <div class="mt-8">
-        <h2 class="text-2xl font-bold mb-4 text-gray-700">3. Describe Pose & Expression <span class="text-gray-400 font-normal">(Optional)</span></h2>
-        <textarea
-          id="custom-prompt-textarea"
-          placeholder="e.g., 'Hands gently holding the belly, smiling softly at the camera.'"
-          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-pink-400 transition-shadow duration-200"
-          rows="3"
-          aria-label="Custom pose and expression prompt"
-        ></textarea>
-      </div>
-      
-      <div class="mt-12 text-center">
-        <p id="error-message" class="text-red-500 mb-4 hidden"></p>
-        <button
-          id="generate-button"
-          disabled
-          class="inline-flex items-center justify-center px-8 py-4 border border-transparent text-lg font-medium rounded-full shadow-lg text-white bg-pink-500 hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-all duration-300 ease-in-out transform hover:scale-105 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-        >
-          <!-- Button content will be injected by JS -->
-        </button>
-      </div>
-    </div>
+      // --- CONSTANTS (from constants.tsx) ---
+      const MATERNITY_STYLES: MaternityStyle[] = [
+        {
+          id: 'boho-meadow',
+          name: 'Boho Meadow',
+          prompt: 'A beautiful pregnant woman in a flowing white lace dress, standing in a sun-drenched meadow of wildflowers. The style is bohemian, ethereal, and romantic, with soft, golden hour lighting.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/boho.jpeg',
+        },
+        {
+          id: 'classic-studio',
+          name: 'Classic Studio',
+          prompt: 'A timeless black and white studio portrait of a pregnant woman. She is elegantly posed against a simple dark backdrop, with dramatic, soft lighting highlighting her silhouette and baby bump.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/studio.jpeg',
+        },
+        {
+          id: 'urban-chic',
+          name: 'Urban Chic',
+          prompt: 'A stylish pregnant woman on a modern city street. She wears a fashionable outfit. The background features interesting architecture and blurred city lights, creating a sophisticated and contemporary vibe.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/urban.jpeg',
+        },
+        {
+          id: 'enchanted-forest',
+          name: 'Enchanted Forest',
+          prompt: 'A pregnant woman dressed as a mythical queen in an ancient, mystical forest. Sunbeams filter through the dense canopy, moss covers the trees, and a gentle mist hangs in the air, creating a magical, fairytale atmosphere.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/forest.jpeg',
+        },
+        {
+          id: 'beach-serenity',
+          name: 'Beach Serenity',
+          prompt: 'A serene pregnant woman walking on a sandy beach at sunset. She wears a light, airy dress that billows in the gentle sea breeze. The waves are calm, and the sky is painted in warm colors.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/beach.jpeg',
+        },
+        {
+          id: 'milk-bath',
+          name: 'Milk Bath',
+          prompt: 'An artistic overhead shot of a pregnant woman reclining in a milk bath filled with colorful fresh flowers and citrus slices. The mood is tranquil, pure, and luxurious.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/milk.jpeg',
+        },
+        {
+          id: 'vintage-glamour',
+          name: 'Vintage Glamour',
+          prompt: 'A pregnant woman styled with 1940s Hollywood glamour. She wears a vintage gown, has classic hair and makeup, and is posed in an elegant, retro-inspired interior. The photo has a soft, nostalgic film grain.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/vintage.jpeg',
+        },
+        {
+          id: 'minimalist-silhouette',
+          name: 'Minimalist Silhouette',
+          prompt: 'A powerful silhouette of a pregnant woman standing against a brightly lit window or a plain, bright background. The image is high-contrast, focusing entirely on her shape and form.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/minimalist.jpeg',
+        },
+        {
+          id: 'royal-elegance',
+          name: 'Royal Elegance',
+          prompt: 'A pregnant woman in a regal, velvet gown standing in a grand, historic room with ornate furniture and a large chandelier. The atmosphere is one of opulence, elegance, and timeless royalty.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/royal.jpeg',
+        },
+        {
+          id: 'rustic-countryside',
+          name: 'Rustic Countryside',
+          prompt: 'A pregnant woman in a cozy knit sweater standing near a rustic barn in the countryside during autumn. The background features rolling hills, fall foliage, and a warm, earthy color palette.',
+          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/rustic.jpeg',
+        },
+      ];
 
-    <!-- Generated Image View -->
-    <div id="generated-image-section" class="hidden max-w-2xl mx-auto text-center animate-fade-in">
-      <h2 class="text-3xl font-bold mb-6 text-gray-800">Your Photoshoot is Ready!</h2>
-      <div class="shadow-2xl rounded-lg overflow-hidden mb-4">
-        <a id="generated-image-link" href="" target="_blank" rel="noopener noreferrer">
-            <img id="generated-image-element" src="" alt="Generated maternity photoshoot" class="w-full h-auto" />
-        </a>
-      </div>
-      <p class="text-gray-600 mb-8">
-        Click the image to open it, then long-press (on mobile) or right-click to save.
-      </p>
-      <div class="flex justify-center">
-        <button
-          id="reset-button"
-          class="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-full shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105"
-        >
-          Start Over
-        </button>
-      </div>
-    </div>
-  </main>
-  
-  <footer class="text-center py-6 text-gray-500 text-sm">
-    <p>Powered by Gemini AI</p>
-  </footer>
+      const UploadIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-10 w-10 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      );
 
-  <script type="module">
-    import { GoogleGenAI, Modality } from "@google/genai";
+      const SparklesIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.293 2.293a1 1 0 010 1.414L10 17l-4 4 4-4 6.293-6.293a1 1 0 011.414 0L21 12m-8 6l4-4" />
+        </svg>
+      );
 
-    // --- STATE MANAGEMENT ---
-    let state = {
-      uploadedImage: null,
-      selectedStyle: null,
-      customPrompt: '',
-      generatedImage: null,
-      isLoading: false,
-      error: null,
-    };
 
-    // --- CONSTANTS ---
-    const PHOTOSHOOT_STYLES = [
-        { id: 'fairy', name: 'Ethereal Fairy', previewImage: 'https://picsum.photos/seed/fairy/300/300', prompt: 'Create a photorealistic maternity photoshoot in an ethereal fairy style. The setting is an enchanted, glowing forest at twilight. The subject is wearing a flowing, gossamer gown adorned with delicate flowers, with iridescent fairy wings. The mood is magical, dreamy, and serene.' },
-        { id: 'glamour', name: 'Classic Glamour', previewImage: 'https://picsum.photos/seed/glamour/300/300', prompt: 'Create a photorealistic, classic glamour maternity photoshoot reminiscent of old Hollywood. The subject is wearing a luxurious silk or satin gown. The lighting is dramatic and elegant, using soft shadows to create a sophisticated and timeless portrait.' },
-        { id: 'bohemian', name: 'Bohemian Chic', previewImage: 'https://picsum.photos/seed/bohemian/300/300', prompt: 'Create a photorealistic, bohemian chic maternity photoshoot. The setting is a sun-drenched field of wildflowers or a rustic, cozy outdoor location. The subject is wearing a lace or macrame dress with natural, earthy accessories. The mood is free-spirited, romantic, and warm.' },
-        { id: 'vintage', name: 'Vintage Film', previewImage: 'https://picsum.photos/seed/vintage/300/300', prompt: 'Create a photorealistic, vintage-inspired maternity photoshoot with the look of 1960s or 7s film photography. The subject is wearing a classic vintage-style dress. The color palette is warm with a slight grain, evoking a sense of nostalgia and charming elegance.'},
-        { id: 'minimalist', name: 'Minimalist', previewImage: 'https://picsum.photos/seed/minimalist/300/300', prompt: 'Create a photorealistic, minimalist maternity photoshoot. The setting is a simple studio with a neutral, seamless background. The subject is wearing simple, elegant clothing that beautifully showcases the pregnant form. The mood is clean, modern, and focused on emotion and connection.'},
-        { id: 'underwater', name: 'Underwater', previewImage: 'https://picsum.photos/seed/underwater/300/300', prompt: 'Create a photorealistic, underwater maternity photoshoot. The subject is gracefully suspended in clear, tranquil blue water, with fabrics from her gown flowing around her. The lighting is diffused and ethereal, creating a weightless and dreamlike scene.'},
-        { id: 'fantasy', name: 'Fantasy Art', previewImage: 'https://picsum.photos/seed/fantasy/300/300', prompt: 'Create a photorealistic, fantasy art style maternity photoshoot. The subject is depicted as a mythical queen or goddess in an epic, otherworldly landscape. She wears ornate, fantastical attire. The mood is powerful, dramatic, and awe-inspiring.'},
-        { id: 'cultural', name: 'Cultural Celebration', previewImage: 'https://picsum.photos/seed/cultural/300/300', prompt: 'Create a photorealistic maternity photoshoot celebrating cultural heritage. The subject is wearing beautiful, traditional garments and accessories specific to a culture. The setting is rich with meaningful details. The mood is proud, vibrant, and deeply personal.'},
-        { id: 'urban', name: 'Urban Maternity', previewImage: 'https://picsum.photos/seed/urban_m/300/300', prompt: 'Create a photorealistic, urban maternity photoshoot on a stylish city street or rooftop at golden hour. The subject wears a modern, fashionable outfit. The mood is confident, chic, and cosmopolitan, with the city lights creating a beautiful bokeh background.'},
-        { id: 'nature', name: 'Nature-Inspired', previewImage: 'https://picsum.photos/seed/nature/300/300', prompt: 'Create a photorealistic, nature-inspired maternity photoshoot in a dramatic landscape, like majestic mountains, a dense forest, or by a serene lake. The subject is wearing natural fabrics, appearing grounded and deeply connected to the elements. The mood is powerful, serene, and wild.'}
-    ];
-    
-    // --- ICONS ---
-    const SparklesIcon = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="w-6 h-6 mr-3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.293 2.293a1 1 0 010 1.414L10 16l-4 4-4-4 5.293-5.293a1 1 0 011.414 0L10 12m0 0l2 2m-2-2l-2-2"/></svg>`;
-    const UploadIcon = `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16" class="w-10 h-10 mb-3 text-gray-400"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/></svg>`;
-    const CheckIcon = `<svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>`;
-    
-    // --- GEMINI SERVICE ---
-    const API_KEY = "AIzaSyBqD4-3jS4Onq1hAoc9wOBZte2m0c7cnUQ";
-    if (!API_KEY) {
-        alert("API_KEY environment variable not set. Please configure it to use this application.");
-    }
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-    const getMimeType = (base64Image) => base64Image.match(/^data:(image\/[a-zA-Z]+);base64,/)?.[1] || 'image/png';
-    const cleanBase64 = (base64Image) => base64Image.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-
-    const generateMaternityPhoto = async (base64Image, stylePrompt, customPrompt) => {
-        const model = 'gemini-2.5-flash-image';
-        const mimeType = getMimeType(base64Image);
-        const cleanedBase64Data = cleanBase64(base64Image);
-
-        let prompt = `Using the face from the provided image, ${stylePrompt}`;
-        if (customPrompt && customPrompt.trim() !== '') {
-            prompt += ` The subject's pose and expression should be: ${customPrompt.trim()}.`;
+      // --- SERVICES (from geminiService.ts) ---
+      const generateMaternityPhoto = async (
+        image: { base64: string; mimeType: string },
+        stylePrompt: string,
+        customBackground: string
+      ): Promise<string> => {
+        const apiKey = window.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error("API Key not found. Please set window.GEMINI_API_KEY.");
         }
-        prompt += ` Ensure the final image is high-resolution and photorealistic.`;
-        
-        try {
-            const response = await ai.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { inlineData: { data: cleanedBase64Data, mimeType: mimeType } },
-                        { text: prompt },
-                    ],
-                },
-                config: { responseModalities: [Modality.IMAGE] },
-            });
+        const ai = new GoogleGenAI({ apiKey });
 
-            const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-            if (firstPart?.inlineData) {
-                return `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}`;
-            } else {
-                throw new Error('No image data found in the API response.');
-            }
+        const finalStylePrompt = customBackground.trim() !== ''
+          ? `A beautiful pregnant woman. Her clothing, hair, and the overall mood should be inspired by this style: "${stylePrompt}". She must be placed in this specific background: "${customBackground.trim()}".`
+          : stylePrompt;
+
+        const textPart = {
+          text: `Create a realistic, high-quality maternity photograph. The subject is a pregnant woman. Her face MUST be identical to the face in the provided image. The scene is described as: ${finalStylePrompt}. The final image should be photorealistic and beautiful, seamlessly blending the provided face onto the model.`
+        };
+
+        const imagePart = {
+          inlineData: {
+            data: image.base64,
+            mimeType: image.mimeType,
+          },
+        };
+
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+              parts: [imagePart, textPart],
+            },
+            config: {
+              responseModalities: [Modality.IMAGE],
+            },
+          });
+
+          const firstPart = response?.candidates?.[0]?.content?.parts?.[0];
+          if (firstPart && firstPart.inlineData) {
+            const base64ImageBytes: string = firstPart.inlineData.data;
+            return `data:${firstPart.inlineData.mimeType};base64,${base64ImageBytes}`;
+          } else {
+            throw new Error("No image was generated. The response may have been blocked.");
+          }
         } catch (error) {
-            console.error('Error generating image with Gemini:', error);
-            throw new Error('Failed to communicate with the AI model.');
+          console.error("Error generating image with Gemini:", error);
+          throw new Error(error.message || "Failed to generate image. Please try a different photo or style.");
         }
-    };
+      };
 
-    // --- DOM ELEMENTS ---
-    const mainForm = document.getElementById('main-form');
-    const generatedImageSection = document.getElementById('generated-image-section');
-    const imageUploaderContainer = document.getElementById('image-uploader-container');
-    const styleSelectorGrid = document.getElementById('style-selector-grid');
-    const customPromptTextarea = document.getElementById('custom-prompt-textarea');
-    const generateButton = document.getElementById('generate-button');
-    const resetButton = document.getElementById('reset-button');
-    const generatedImageElement = document.getElementById('generated-image-element');
-    const generatedImageLink = document.getElementById('generated-image-link');
-    const errorMessageElement = document.getElementById('error-message');
 
-    // --- RENDER FUNCTIONS ---
+      // --- APP COMPONENT (from App.tsx) ---
+      const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => {
+            const result = reader.result;
+            const [mimePrefix, base64Data] = result.split(',');
+            const mimeType = mimePrefix.split(':')[1].split(';')[0];
+            resolve({ base64: base64Data, mimeType, previewUrl: result });
+          };
+          reader.onerror = (error) => reject(error);
+        });
+      };
 
-    function renderApp() {
-        // Show/hide main sections
-        if (state.generatedImage) {
-            mainForm.classList.add('hidden');
-            generatedImageSection.classList.remove('hidden');
-            generatedImageElement.src = state.generatedImage;
-            generatedImageLink.href = state.generatedImage;
-        } else {
-            mainForm.classList.remove('hidden');
-            generatedImageSection.classList.add('hidden');
-        }
+      const StepCard = ({ step, title, children }) => (
+        <div className="bg-slate-800/50 rounded-2xl p-6 shadow-lg border border-slate-700">
+          <div className="flex items-center mb-4">
+            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-500 text-white font-bold text-sm mr-4">{step}</div>
+            <h2 className="text-xl font-semibold text-slate-200">{title}</h2>
+          </div>
+          {children}
+        </div>
+      );
 
-        // Update Generate Button
-        generateButton.disabled = !state.uploadedImage || !state.selectedStyle || state.isLoading;
-        if (state.isLoading) {
-            generateButton.innerHTML = `
-                <div class="flex items-center justify-center space-x-2">
-                    <div class="w-4 h-4 rounded-full loader-dot bg-white"></div>
-                    <div class="w-4 h-4 rounded-full loader-dot bg-white"></div>
-                    <div class="w-4 h-4 rounded-full loader-dot bg-white"></div>
-                    <span class="ml-2">Generating...</span>
-                </div>`;
-        } else {
-            generateButton.innerHTML = `${SparklesIcon} Generate Photoshoot`;
-        }
+      const ResultCard = ({ title, children }) => (
+        <div className="bg-slate-800/50 rounded-2xl p-6 shadow-lg border border-slate-700">
+          <h2 className="text-xl font-semibold text-slate-200 mb-4">{title}</h2>
+          {children}
+        </div>
+      );
 
-        // Update Error Message
-        if (state.error) {
-            errorMessageElement.textContent = state.error;
-            errorMessageElement.classList.remove('hidden');
-        } else {
-            errorMessageElement.classList.add('hidden');
-        }
-    }
+      const ImageUploader = ({ uploadedImage, onImageUpload }) => {
+        const fileInputRef = useRef(null);
 
-    function renderStyleSelector() {
-        styleSelectorGrid.innerHTML = '';
-        PHOTOSHOOT_STYLES.forEach(style => {
-            const isSelected = state.selectedStyle?.id === style.id;
-            const card = document.createElement('div');
-            card.className = `
-                cursor-pointer group rounded-lg overflow-hidden shadow-md 
-                transform transition-all duration-300 hover:scale-105 hover:shadow-xl
-                focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50
-                ${isSelected ? 'ring-4 ring-pink-500' : 'ring-2 ring-transparent'}
-            `;
-            card.tabIndex = 0;
-            card.innerHTML = `
-                <div class="relative">
-                    <img src="${style.previewImage}" alt="${style.name}" class="w-full h-full object-cover aspect-square" />
-                    <div class="absolute inset-0 bg-black bg-opacity-40 flex items-end p-2 transition-opacity duration-300">
-                        <h3 class="text-white text-sm font-semibold text-center w-full">${style.name}</h3>
-                    </div>
-                    ${isSelected ? `<div class="absolute inset-0 bg-white bg-opacity-20 flex items-center justify-center">${CheckIcon}</div>` : ''}
+        const handleFileChange = async (event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            try {
+              const image = await fileToBase64(file);
+              onImageUpload(image);
+            } catch (error) {
+              console.error("Error converting file to base64", error);
+              alert("Could not process file. Please try another image.");
+            }
+          }
+        };
+        
+        const handleUploadClick = () => {
+            fileInputRef.current?.click();
+        };
+
+        return (
+          <div className="w-full">
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              className="hidden" 
+              accept="image/jpeg, image/png" 
+              onChange={handleFileChange} 
+            />
+            {uploadedImage ? (
+              <div className="text-center">
+                <img src={uploadedImage.previewUrl} alt="Face preview" className="w-32 h-32 rounded-full mx-auto object-cover border-4 border-indigo-500 p-1" />
+                <button onClick={handleUploadClick} className="mt-4 text-sm text-indigo-400 hover:text-indigo-300">Change Photo</button>
+              </div>
+            ) : (
+              <div
+                onClick={handleUploadClick}
+                className="relative block w-full border-2 border-dashed border-slate-600 rounded-lg p-12 text-center hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer transition-colors"
+              >
+                <UploadIcon />
+                <span className="mt-2 block text-sm font-medium text-slate-400">
+                  Click to upload a clear photo of a face
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const StyleSelector = ({ selectedStyleId, onStyleSelect }) => {
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {MATERNITY_STYLES.map((style) => (
+              <div
+                key={style.id}
+                onClick={() => onStyleSelect(style.id)}
+                className={`relative rounded-lg overflow-hidden cursor-pointer group transform transition-transform hover:scale-105 ${selectedStyleId === style.id ? 'ring-4 ring-indigo-500' : 'ring-2 ring-transparent'}`}
+              >
+                <img src={style.thumbnail} alt={style.name} className="w-full h-24 md:h-32 object-cover" />
+                <div className="absolute inset-0 bg-black bg-opacity-40 group-hover:bg-opacity-20 transition-all"></div>
+                <p className="absolute bottom-0 left-0 w-full text-center p-2 text-xs font-semibold text-white bg-black bg-opacity-60">
+                  {style.name}
+                </p>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      const Loader = () => (
+        <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-800/50 rounded-2xl">
+          <div className="w-16 h-16 border-4 border-dashed border-indigo-400 rounded-full animate-spin"></div>
+          <p className="text-slate-300 mt-4 font-semibold">Generating your masterpiece...</p>
+          <p className="text-slate-400 text-sm mt-2">This can take a moment. The AI is working its magic!</p>
+        </div>
+      );
+
+      const App = () => {
+        const [uploadedImage, setUploadedImage] = useState(null);
+        const [selectedStyleId, setSelectedStyleId] = useState(null);
+        const [customBackground, setCustomBackground] = useState('');
+        const [generatedImage, setGeneratedImage] = useState(null);
+        const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState(null);
+        
+        // The API key is now read directly from the window object.
+        const API_KEY = window.GEMINI_API_KEY;
+
+        const handleGenerateClick = useCallback(async () => {
+          if (!uploadedImage || !selectedStyleId) {
+            setError("Please upload a photo and select a style first.");
+            return;
+          }
+          if (!API_KEY) {
+             setError("API Key not provided. The app must be run in an environment that sets window.GEMINI_API_KEY.");
+             return;
+          }
+
+          setIsLoading(true);
+          setError(null);
+          setGeneratedImage(null);
+
+          try {
+            const style = MATERNITY_STYLES.find(s => s.id === selectedStyleId);
+            if (!style) throw new Error("Selected style not found");
+
+            const result = await generateMaternityPhoto(uploadedImage, style.prompt, customBackground);
+            setGeneratedImage(result);
+          } catch (err) {
+            setError(err.message || "An unexpected error occurred.");
+          } finally {
+            setIsLoading(false);
+          }
+        }, [uploadedImage, selectedStyleId, customBackground, API_KEY]);
+
+        const isGenerateDisabled = !uploadedImage || !selectedStyleId || isLoading || !API_KEY;
+
+        return (
+          <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8 font-sans">
+            <div className="max-w-7xl mx-auto">
+              <header className="text-center mb-10">
+                <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
+                  Maternity Muse AI
+                </h1>
+                <p className="mt-2 text-lg text-slate-400">Create your dream maternity photoshoot with AI</p>
+              </header>
+
+              <main className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                <div className="flex flex-col gap-8">
+                  <StepCard step={1} title="Upload a Face Photo">
+                    <ImageUploader uploadedImage={uploadedImage} onImageUpload={setUploadedImage} />
+                  </StepCard>
+                  <StepCard step={2} title="Choose Your Style">
+                    <StyleSelector selectedStyleId={selectedStyleId} onStyleSelect={setSelectedStyleId} />
+                  </StepCard>
+                  <StepCard step={3} title="Customize Background (Optional)">
+                    <textarea
+                      value={customBackground}
+                      onChange={(e) => setCustomBackground(e.target.value)}
+                      placeholder="e.g., 'a field of wildflowers at sunset', 'a minimalist studio with soft lighting'"
+                      className="w-full h-24 bg-slate-900/50 border border-slate-600 rounded-lg p-3 text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                      aria-label="Custom background description"
+                    />
+                    <p className="text-xs text-slate-500 mt-2">Describe the scene you imagine. If left blank, the style's default background will be used.</p>
+                  </StepCard>
                 </div>
-            `;
-            card.addEventListener('click', () => handleStyleSelect(style));
-            card.addEventListener('keypress', (e) => e.key === 'Enter' && handleStyleSelect(style));
-            styleSelectorGrid.appendChild(card);
-        });
-    }
-    
-    function renderImageUploader() {
-        const hasPreview = !!state.uploadedImage;
-        imageUploaderContainer.innerHTML = `
-            <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" class="hidden" />
-            <label id="drop-zone" class="flex flex-col items-center justify-center w-full aspect-square border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200 ${hasPreview ? 'border-pink-300' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}">
-                ${hasPreview
-                    ? `<img src="${state.uploadedImage}" alt="Image preview" class="object-cover w-full h-full rounded-lg" />`
-                    : `<div class="flex flex-col items-center justify-center pt-5 pb-6 text-center p-4">
-                            ${UploadIcon}
-                            <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
-                            <p class="text-xs text-gray-500">PNG, JPG, or WEBP</p>
-                       </div>`
-                }
-            </label>
-            ${hasPreview
-                ? `<button id="change-photo-button" class="w-full mt-4 py-2 px-4 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors">Change Photo</button>`
-                : ''
-            }
-            <p id="uploader-error" class="mt-2 text-sm text-red-600 hidden"></p>
-        `;
-        
-        const fileInput = document.getElementById('file-input');
-        const dropZone = document.getElementById('drop-zone');
-        const changePhotoButton = document.getElementById('change-photo-button');
 
-        const triggerFileInput = () => fileInput.click();
-        
-        dropZone.addEventListener('click', (e) => {
-             // Only trigger file input if there's no preview. If there is, it behaves like a normal image container.
-            if (!state.uploadedImage) {
-                 triggerFileInput();
-            }
-        });
-        changePhotoButton?.addEventListener('click', triggerFileInput);
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files?.[0]) {
-                processFile(e.target.files[0]);
-            }
-        });
+                <div className="md:sticky md:top-8 flex flex-col gap-6">
+                  <ResultCard title="Your Masterpiece">
+                    <div className="min-h-[300px] flex items-center justify-center bg-slate-900/50 rounded-lg p-4">
+                      {!API_KEY ? (
+                         <div className="text-center p-8">
+                          <h3 className="font-semibold text-slate-300 mb-2">API Key Not Provided</h3>
+                          <p className="text-sm text-slate-400">
+                            This application requires a Gemini API key. Please ensure it is set as a global JavaScript variable named <code>window.GEMINI_API_KEY</code>.
+                          </p>
+                        </div>
+                      ) : isLoading ? (
+                        <Loader />
+                      ) : error ? (
+                        <div className="text-center text-red-400">
+                          <p className="font-bold">Generation Failed</p>
+                          <p className="text-sm">{error}</p>
+                        </div>
+                      ) : generatedImage ? (
+                        <div className="w-full flex flex-col items-center gap-4">
+                          <img src={generatedImage} alt="Generated maternity" className="rounded-lg shadow-2xl max-w-full max-h-96" />
+                          <a
+                            href={generatedImage}
+                            download="maternity-muse-photo.png"
+                            className="w-full sm:w-auto text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                          >
+                            Download Image
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-center text-slate-500">
+                          <p className="font-semibold">Your masterpiece will appear here</p>
+                          <p className="text-sm">Complete steps 1 & 2 to get started</p>
+                        </div>
+                      )}
+                    </div>
+                  </ResultCard>
 
-        dropZone.addEventListener('dragover', (e) => e.preventDefault());
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (e.dataTransfer.files?.[0]) {
-                processFile(e.dataTransfer.files[0]);
-            }
-        });
-    }
+                  <button
+                    onClick={handleGenerateClick}
+                    disabled={isGenerateDisabled}
+                    className={`w-full flex items-center justify-center gap-2 text-lg font-bold py-4 px-6 rounded-xl transition-all duration-300 transform
+                      ${isGenerateDisabled
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 hover:scale-105'
+                      }`}
+                  >
+                    <SparklesIcon />
+                    {isLoading ? 'Generating...' : 'Generate Masterpiece'}
+                  </button>
+                </div>
+              </main>
+            </div>
+          </div>
+        );
+      };
 
-    // --- EVENT HANDLERS & LOGIC ---
+      // --- RENDERER (from index.tsx) ---
+      const rootElement = document.getElementById('root');
+      if (!rootElement) {
+        throw new Error("Could not find root element to mount to");
+      }
 
-    function processFile(file) {
-        const uploaderError = document.getElementById('uploader-error');
-        if (!file.type.startsWith('image/')) {
-            uploaderError.textContent = 'Please select an image file.';
-            uploaderError.classList.remove('hidden');
-            return;
-        }
-        uploaderError.classList.add('hidden');
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            handleImageUpload(reader.result);
-        };
-        reader.onerror = () => {
-            uploaderError.textContent = 'Failed to read file.';
-            uploaderError.classList.remove('hidden');
-        };
-        reader.readAsDataURL(file);
-    }
-    
-    function handleImageUpload(base64Image) {
-        state.uploadedImage = base64Image;
-        state.generatedImage = null;
-        state.error = null;
-        renderImageUploader(); // Re-render the uploader with the preview
-        renderApp();
-    }
-
-    function handleStyleSelect(style) {
-        state.selectedStyle = style;
-        state.generatedImage = null;
-        state.error = null;
-        renderStyleSelector(); // Re-render styles to show selection
-        renderApp();
-    }
-
-    async function handleGenerate() {
-        if (!state.uploadedImage || !state.selectedStyle) {
-            state.error = 'Please upload an image and select a style.';
-            renderApp();
-            return;
-        }
-
-        state.isLoading = true;
-        state.error = null;
-        state.generatedImage = null;
-        renderApp();
-
-        try {
-            const result = await generateMaternityPhoto(state.uploadedImage, state.selectedStyle.prompt, state.customPrompt);
-            state.generatedImage = result;
-        } catch (err) {
-            console.error(err);
-            state.error = 'Failed to generate image. Please try again.';
-        } finally {
-            state.isLoading = false;
-            renderApp();
-        }
-    }
-
-    function handleReset() {
-        state.uploadedImage = null;
-        state.selectedStyle = null;
-        state.generatedImage = null;
-        state.isLoading = false;
-        state.error = null;
-        state.customPrompt = '';
-        customPromptTextarea.value = '';
-
-        renderImageUploader();
-        renderStyleSelector();
-        renderApp();
-    }
-
-    // --- INITIALIZATION ---
-    function init() {
-        renderImageUploader();
-        renderStyleSelector();
-        renderApp();
-
-        generateButton.addEventListener('click', handleGenerate);
-        resetButton.addEventListener('click', handleReset);
-        customPromptTextarea.addEventListener('input', (e) => {
-            state.customPrompt = e.target.value;
-        });
-    }
-
-    // Start the app
-    init();
-  </script>
-</body>
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      );
+    </script>
+  </body>
 </html>

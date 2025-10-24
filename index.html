@@ -1,448 +1,384 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Maternity Muse AI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {
-        "imports": {
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "@google/genai": "https://esm.sh/@google/genai"
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Photo Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
         }
-      }
-    </script>
-  </head>
-  <body class="bg-slate-900">
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React, { useState, useCallback, useEffect } from 'react';
-      import ReactDOM from 'react-dom/client';
-      import { GoogleGenAI, Modality } from "@google/genai";
-
-      // --- TYPES (from types.ts) ---
-      interface MaternityStyle {
-        id: string;
-        name: string;
-        prompt: string;
-        thumbnail: string;
-      }
-
-      interface UploadedImage {
-        base64: string;
-        mimeType: string;
-        previewUrl: string;
-      }
-
-      // --- CONSTANTS (from constants.tsx) ---
-      const MATERNITY_STYLES: MaternityStyle[] = [
-        {
-          id: 'boho-meadow',
-          name: 'Boho Meadow',
-          prompt: 'A beautiful pregnant woman in a flowing white lace dress, standing in a sun-drenched meadow of wildflowers. The style is bohemian, ethereal, and romantic, with soft, golden hour lighting.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/boho.jpeg',
-        },
-        {
-          id: 'classic-studio',
-          name: 'Classic Studio',
-          prompt: 'A timeless black and white studio portrait of a pregnant woman. She is elegantly posed against a simple dark backdrop, with dramatic, soft lighting highlighting her silhouette and baby bump.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/studio.jpeg',
-        },
-        {
-          id: 'urban-chic',
-          name: 'Urban Chic',
-          prompt: 'A stylish pregnant woman on a modern city street. She wears a fashionable outfit. The background features interesting architecture and blurred city lights, creating a sophisticated and contemporary vibe.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/urban.jpeg',
-        },
-        {
-          id: 'enchanted-forest',
-          name: 'Enchanted Forest',
-          prompt: 'A pregnant woman dressed as a mythical queen in an ancient, mystical forest. Sunbeams filter through the dense canopy, moss covers the trees, and a gentle mist hangs in the air, creating a magical, fairytale atmosphere.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/forest.jpeg',
-        },
-        {
-          id: 'beach-serenity',
-          name: 'Beach Serenity',
-          prompt: 'A serene pregnant woman walking on a sandy beach at sunset. She wears a light, airy dress that billows in the gentle sea breeze. The waves are calm, and the sky is painted in warm colors.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/beach.jpeg',
-        },
-        {
-          id: 'milk-bath',
-          name: 'Milk Bath',
-          prompt: 'An artistic overhead shot of a pregnant woman reclining in a milk bath filled with colorful fresh flowers and citrus slices. The mood is tranquil, pure, and luxurious.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/milk.jpeg',
-        },
-        {
-          id: 'vintage-glamour',
-          name: 'Vintage Glamour',
-          prompt: 'A pregnant woman styled with 1940s Hollywood glamour. She wears a vintage gown, has classic hair and makeup, and is posed in an elegant, retro-inspired interior. The photo has a soft, nostalgic film grain.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/vintage.jpeg',
-        },
-        {
-          id: 'minimalist-silhouette',
-          name: 'Minimalist Silhouette',
-          prompt: 'A powerful silhouette of a pregnant woman standing against a brightly lit window or a plain, bright background. The image is high-contrast, focusing entirely on her shape and form.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/minimalist.jpeg',
-        },
-        {
-          id: 'royal-elegance',
-          name: 'Royal Elegance',
-          prompt: 'A pregnant woman in a regal, velvet gown standing in a grand, historic room with ornate furniture and a large chandelier. The atmosphere is one of opulence, elegance, and timeless royalty.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/royal.jpeg',
-        },
-        {
-          id: 'rustic-countryside',
-          name: 'Rustic Countryside',
-          prompt: 'A pregnant woman in a cozy knit sweater standing near a rustic barn in the countryside during autumn. The background features rolling hills, fall foliage, and a warm, earthy color palette.',
-          thumbnail: 'https://storage.googleapis.com/gemini-ui-gallery/v1/52774910-c481-4235-a7b2-a421b96f9f59/rustic.jpeg',
-        },
-      ];
-
-      const UploadIcon = () => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-10 w-10 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-      );
-
-      const SparklesIcon = () => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.293 2.293a1 1 0 010 1.414L10 17l-4 4 4-4 6.293-6.293a1 1 0 011.414 0L21 12m-8 6l4-4" />
-        </svg>
-      );
-
-
-      // --- SERVICES (from geminiService.ts) ---
-      const generateMaternityPhoto = async (
-        image: { base64: string; mimeType: string },
-        stylePrompt: string,
-        customBackground: string
-      ): Promise<string> => {
-        // The API key is injected by the environment after user selection.
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-        const finalStylePrompt = customBackground.trim() !== ''
-          ? `A beautiful pregnant woman. Her clothing, hair, and the overall mood should be inspired by this style: "${stylePrompt}". She must be placed in this specific background: "${customBackground.trim()}".`
-          : stylePrompt;
-
-        const textPart = {
-          text: `Create a realistic, high-quality maternity photograph. The subject is a pregnant woman. Her face MUST be identical to the face in the provided image. The scene is described as: ${finalStylePrompt}. The final image should be photorealistic and beautiful, seamlessly blending the provided face onto the model.`
-        };
-
-        const imagePart = {
-          inlineData: {
-            data: image.base64,
-            mimeType: image.mimeType,
-          },
-        };
-
-        try {
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: {
-              parts: [imagePart, textPart],
-            },
-            config: {
-              responseModalities: [Modality.IMAGE],
-            },
-          });
-
-          const firstPart = response?.candidates?.[0]?.content?.parts?.[0];
-          if (firstPart && firstPart.inlineData) {
-            const base64ImageBytes: string = firstPart.inlineData.data;
-            return `data:${firstPart.inlineData.mimeType};base64,${base64ImageBytes}`;
-          } else {
-            throw new Error("No image was generated. The response may have been blocked.");
-          }
-        } catch (error) {
-          console.error("Error generating image with Gemini:", error);
-          // Propagate the original error message for more specific feedback.
-          throw new Error(error.message || "Failed to generate image. Please try a different photo or style.");
+        .container-card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 20px;
         }
-      };
+        h1 {
+            color: #4a4a4a;
+            font-size: 24px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #007aff;
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: #666;
+            font-size: 18px;
+            margin-top: 20px;
+            margin-bottom: 15px;
+        }
+        /* --- Style Gallery --- */
+        #style-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .style-option {
+            padding: 10px 15px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            background-color: #f9f9f9;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .style-option.selected {
+            border-color: #007aff;
+            background-color: #e6f0ff;
+            color: #007aff;
+            font-weight: bold;
+        }
+        /* --- Photo Upload --- */
+        .file-upload-container {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background-color: #fafafa;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .file-upload-container:hover {
+            border-color: #007aff;
+        }
+        #photo-input {
+            display: none; /* Hide the default file input */
+        }
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+        }
+        /* --- Prompt Input --- */
+        #prompt-input {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            resize: vertical;
+            box-sizing: border-box;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        /* --- Button --- */
+        #generate-btn {
+            width: 100%;
+            padding: 15px;
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #generate-btn:disabled {
+            background-color: #a0c3e6;
+            cursor: not-allowed;
+        }
+        #generate-btn:not(:disabled):hover {
+            background-color: #0056b3;
+        }
+        /* --- Result Section --- */
+        #result-section {
+            display: none; /* Initially hidden, JS will show it */
+            margin-top: 30px;
+            text-align: center;
+        }
+        #generated-image {
+            width: 100%;
+            max-width: 400px;
+            height: auto; /* Ensure aspect ratio is maintained */
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        #download-btn {
+            padding: 12px 25px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #download-btn:hover {
+            background-color: #1e7e34;
+        }
+        /* --- Status Message --- */
+        #status-message {
+            color: red;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
 
+    <div class="container-card">
+        <h1>AI Maternity Photo Generator</h1>
 
-      // --- APP COMPONENT (from App.tsx) ---
-      const fileToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => {
-            const result = reader.result;
-            const [mimePrefix, base64Data] = result.split(',');
-            const mimeType = mimePrefix.split(':')[1].split(';')[0];
-            resolve({ base64: base64Data, mimeType, previewUrl: result });
-          };
-          reader.onerror = (error) => reject(error);
-        });
-      };
-
-      const StepCard = ({ step, title, children }) => (
-        <div className="bg-slate-800/50 rounded-2xl p-6 shadow-lg border border-slate-700">
-          <div className="flex items-center mb-4">
-            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-500 text-white font-bold text-sm mr-4">{step}</div>
-            <h2 className="text-xl font-semibold text-slate-200">{title}</h2>
-          </div>
-          {children}
-        </div>
-      );
-
-      const ResultCard = ({ title, children }) => (
-        <div className="bg-slate-800/50 rounded-2xl p-6 shadow-lg border border-slate-700">
-          <h2 className="text-xl font-semibold text-slate-200 mb-4">{title}</h2>
-          {children}
-        </div>
-      );
-
-      const ImageUploader = ({ uploadedImage, onImageUpload }) => {
-        const handleFileChange = async (event) => {
-          const file = event.target.files?.[0];
-          if (file) {
-            try {
-              const image = await fileToBase64(file);
-              onImageUpload(image);
-            } catch (error) {
-              console.error("Error converting file to base64", error);
-              alert("Could not process file. Please try another image.");
-            }
-          }
-        };
-
-        return (
-          <div className="w-full">
-            {uploadedImage ? (
-              <div className="text-center">
-                <img src={uploadedImage.previewUrl} alt="Face preview" className="w-32 h-32 rounded-full mx-auto object-cover border-4 border-indigo-500 p-1" />
-                <button onClick={() => document.getElementById('file-upload')?.click()} className="mt-4 text-sm text-indigo-400 hover:text-indigo-300">Change Photo</button>
-                <input type="file" id="file-upload" className="hidden" accept="image/jpeg, image/png" onChange={handleFileChange} />
-              </div>
-            ) : (
-              <div
-                onClick={() => document.getElementById('file-upload')?.click()}
-                className="relative block w-full border-2 border-dashed border-slate-600 rounded-lg p-12 text-center hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer transition-colors"
-              >
-                <UploadIcon />
-                <span className="mt-2 block text-sm font-medium text-slate-400">
-                  Click to upload a clear photo of a face
-                </span>
-                <input type="file" id="file-upload" className="hidden" accept="image/jpeg, image/png" onChange={handleFileChange} />
-              </div>
-            )}
-          </div>
-        );
-      };
-
-      const StyleSelector = ({ selectedStyleId, onStyleSelect }) => {
-        return (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {MATERNITY_STYLES.map((style) => (
-              <div
-                key={style.id}
-                onClick={() => onStyleSelect(style.id)}
-                className={`relative rounded-lg overflow-hidden cursor-pointer group transform transition-transform hover:scale-105 ${selectedStyleId === style.id ? 'ring-4 ring-indigo-500' : 'ring-2 ring-transparent'}`}
-              >
-                <img src={style.thumbnail} alt={style.name} className="w-full h-24 md:h-32 object-cover" />
-                <div className="absolute inset-0 bg-black bg-opacity-40 group-hover:bg-opacity-20 transition-all"></div>
-                <p className="absolute bottom-0 left-0 w-full text-center p-2 text-xs font-semibold text-white bg-black bg-opacity-60">
-                  {style.name}
-                </p>
-              </div>
-            ))}
-          </div>
-        );
-      };
-
-      const Loader = () => (
-        <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-800/50 rounded-2xl">
-          <div className="w-16 h-16 border-4 border-dashed border-indigo-400 rounded-full animate-spin"></div>
-          <p className="text-slate-300 mt-4 font-semibold">Generating your masterpiece...</p>
-          <p className="text-slate-400 text-sm mt-2">This can take a moment. The AI is working its magic!</p>
-        </div>
-      );
-
-      const App = () => {
-        const [uploadedImage, setUploadedImage] = useState(null);
-        const [selectedStyleId, setSelectedStyleId] = useState(null);
-        const [customBackground, setCustomBackground] = useState('');
-        const [generatedImage, setGeneratedImage] = useState(null);
-        const [isLoading, setIsLoading] = useState(false);
-        const [error, setError] = useState(null);
-        const [isKeyReady, setIsKeyReady] = useState(false);
-        
-        useEffect(() => {
-          const checkApiKey = async () => {
-            if (window.aistudio) {
-              const hasKey = await window.aistudio.hasSelectedApiKey();
-              setIsKeyReady(hasKey);
-            }
-          };
-          checkApiKey();
-        }, []);
-
-        const handleSelectKey = async () => {
-          if (window.aistudio) {
-            await window.aistudio.openSelectKey();
-            // Assume key selection is successful, per guidelines for race conditions.
-            setIsKeyReady(true);
-          }
-        };
-
-        const handleGenerateClick = useCallback(async () => {
-          if (!uploadedImage || !selectedStyleId) {
-            setError("Please upload a photo and select a style first.");
-            return;
-          }
-          if (!isKeyReady) {
-             setError("Please select an API key before generating.");
-             return;
-          }
-
-          setIsLoading(true);
-          setError(null);
-          setGeneratedImage(null);
-
-          try {
-            const style = MATERNITY_STYLES.find(s => s.id === selectedStyleId);
-            if (!style) throw new Error("Selected style not found");
-
-            const result = await generateMaternityPhoto(uploadedImage, style.prompt, customBackground);
-            setGeneratedImage(result);
-          } catch (err) {
-            if (err.message && err.message.includes("API key not valid")) {
-              setError("API Key error. Please re-select your key and try again.");
-              setIsKeyReady(false); // Reset key state to prompt user again
-            } else {
-              setError(err.message || "An unexpected error occurred.");
-            }
-          } finally {
-            setIsLoading(false);
-          }
-        }, [uploadedImage, selectedStyleId, customBackground, isKeyReady]);
-
-        const isGenerateDisabled = !uploadedImage || !selectedStyleId || isLoading || !isKeyReady;
-
-        return (
-          <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8 font-sans">
-            <div className="max-w-7xl mx-auto">
-              <header className="text-center mb-10">
-                <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">
-                  Maternity Muse AI
-                </h1>
-                <p className="mt-2 text-lg text-slate-400">Create your dream maternity photoshoot with AI</p>
-              </header>
-
-              <main className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                <div className="flex flex-col gap-8">
-                  <StepCard step={1} title="Upload a Face Photo">
-                    <ImageUploader uploadedImage={uploadedImage} onImageUpload={setUploadedImage} />
-                  </StepCard>
-                  <StepCard step={2} title="Choose Your Style">
-                    <StyleSelector selectedStyleId={selectedStyleId} onStyleSelect={setSelectedStyleId} />
-                  </StepCard>
-                  <StepCard step={3} title="Customize Background (Optional)">
-                    <textarea
-                      value={customBackground}
-                      onChange={(e) => setCustomBackground(e.target.value)}
-                      placeholder="e.g., 'a field of wildflowers at sunset', 'a minimalist studio with soft lighting'"
-                      className="w-full h-24 bg-slate-900/50 border border-slate-600 rounded-lg p-3 text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                      aria-label="Custom background description"
-                    />
-                    <p className="text-xs text-slate-500 mt-2">Describe the scene you imagine. If left blank, the style's default background will be used.</p>
-                  </StepCard>
-                </div>
-
-                <div className="md:sticky md:top-8 flex flex-col gap-6">
-                  <ResultCard title="Your Masterpiece">
-                    {!isKeyReady ? (
-                       <div className="text-center p-8">
-                        <h3 className="font-semibold text-slate-300 mb-2">API Key Required</h3>
-                        <p className="text-sm text-slate-400 mb-4">
-                          Please select your API key to enable image generation.
-                        </p>
-                        <button
-                          onClick={handleSelectKey}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                        >
-                          Select API Key
-                        </button>
-                        <p className="text-xs text-slate-500 mt-3">
-                          For billing information, see the{' '}
-                          <a
-                            href="https://ai.google.dev/gemini-api/docs/billing"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline hover:text-indigo-400"
-                          >
-                            Gemini API documentation
-                          </a>
-                          .
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="min-h-[300px] flex items-center justify-center bg-slate-900/50 rounded-lg p-4">
-                        {isLoading ? (
-                          <Loader />
-                        ) : error ? (
-                          <div className="text-center text-red-400">
-                            <p className="font-bold">Generation Failed</p>
-                            <p className="text-sm">{error}</p>
-                          </div>
-                        ) : generatedImage ? (
-                          <div className="w-full flex flex-col items-center gap-4">
-                            <img src={generatedImage} alt="Generated maternity" className="rounded-lg shadow-2xl max-w-full max-h-96" />
-                            <a
-                              href={generatedImage}
-                              download="maternity-muse-photo.png"
-                              className="w-full sm:w-auto text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                            >
-                              Download Image
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="text-center text-slate-500">
-                            <p className="font-semibold">Your masterpiece will appear here</p>
-                            <p className="text-sm">Complete steps 1 & 2 to get started</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </ResultCard>
-
-                  <button
-                    onClick={handleGenerateClick}
-                    disabled={isGenerateDisabled}
-                    className={`w-full flex items-center justify-center gap-2 text-lg font-bold py-4 px-6 rounded-xl transition-all duration-300 transform
-                      ${isGenerateDisabled
-                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 hover:scale-105'
-                      }`}
-                  >
-                    <SparklesIcon />
-                    {isLoading ? 'Generating...' : 'Generate Masterpiece'}
-                  </button>
-                </div>
-              </main>
+        <h3>1. Choose Style</h3>
+        <div id="style-gallery">
             </div>
-          </div>
-        );
-      };
 
-      // --- RENDERER (from index.tsx) ---
-      const rootElement = document.getElementById('root');
-      if (!rootElement) {
-        throw new Error("Could not find root element to mount to");
-      }
+        <h3>2. Upload Photo</h3>
+        <div class="file-upload-container">
+            <input type="file" id="photo-input" accept="image/*">
+            <p class="upload-text" id="upload-status">Click here to upload a photo</p>
+        </div>
 
-      const root = ReactDOM.createRoot(rootElement);
-      root.render(
-        <React.StrictMode>
-          <App />
-        </React.StrictMode>
-      );
+        <h3>3. Edit Prompt (Required for generation)</h3>
+        <textarea id="prompt-input" placeholder="A stunning maternity portrait, soft lighting, detailed face..."></textarea>
+
+        <button id="generate-btn" disabled>Generate Photo</button>
+        <p id="status-message"></p>
+    </div>
+
+    <div id="result-section" class="container-card">
+        <h3>Generated Photo</h3>
+        <img id="generated-image" src="" alt="Generated AI Photo">
+        <button id="download-btn">Download Photo</button>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // !!! IMPORTANT: REPLACE "YOUR_GOOGLE_AI_API_KEY_HERE" with your actual key !!!
+        const API_KEY = "AIzaSyBqD4-3jS4Onq1hAoc9wOBZte2m0c7cnUQ"; 
+        const MODEL_NAME = "gemini-2.5-flash"; 
+        const GOOGLE_ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-image-preview:generateImages`;
+        
+        const AVAILABLE_STYLES = [
+    { "id": 'classic', "name": 'Classic Portrait', "prompt_suffix": 'high-resolution, studio lighting, elegant, detailed face.' },
+    { "id": 'fantasy', "name": 'Fantasy Garden', "prompt_suffix": 'dreamy, soft focus, surrounded by magical glowing flora.' },
+    { "id": 'bohemian', "name": 'Bohemian Sunset', "prompt_suffix": 'golden hour, flowing fabrics, beach setting, warm tones.' },
+    { "id": 'minimal', "name": 'Minimalist', "prompt_suffix": 'white backdrop, subtle shadow, focus on form and silhouette.' }
+];
+
+        // --- STATE MANAGEMENT ---
+        let selectedStyleId = null;
+        let photoUploaded = false; // We use this for UI checks, but not yet for generation
+
+        // --- DOM ELEMENTS ---
+        const gallery = document.getElementById('style-gallery');
+        const generateButton = document.getElementById('generate-btn');
+        const photoInput = document.getElementById('photo-input');
+        const uploadStatus = document.getElementById('upload-status');
+        const resultSection = document.getElementById('result-section');
+        const generatedImage = document.getElementById('generated-image');
+        const downloadButton = document.getElementById('download-btn');
+        const promptInput = document.getElementById('prompt-input');
+        const statusMessage = document.getElementById('status-message');
+
+        // --- FUNCTIONS ---
+// --- CRITICAL FIX: The entire API call is now moved to JavaScript ---
+async function handleGenerateClick() {
+    const style = AVAILABLE_STYLES.find(s => s.id === selectedStyleId);
+    const prompt = promptInput.value.trim();
+    statusMessage.textContent = ''; // Clear previous errors
+
+    // 1. Prepare UI for loading state
+    generateButton.disabled = true;
+    generateButton.textContent = 'Generating... (Please wait)';
+    resultSection.style.display = 'none';
+
+    // 2. Construct the API request body (using quoted keys for stability)
+    const requestBody = {
+        "requests": [
+            {
+                "prompt": prompt,
+                "config": {
+                    "numberOfImages": 1,
+                    "outputMimeType": "image/jpeg",
+                    "aspectRatio": "4:5"
+                }
+            }
+        ]
+    };
+
+    try {
+        // 3. Perform the API Fetch directly in JavaScript
+        // Ensure GOOGLE_ENDPOINT and API_KEY are defined correctly at the top of the <script> block
+        const urlWithKey = GOOGLE_ENDPOINT + `?key=${API_KEY}`;
+        
+        const response = await fetch(urlWithKey, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            // Check for specific API errors and throw an exception
+            const errorData = await response.json();
+            throw new Error(`API Error ${response.status}: ${errorData.error.message || response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        // 4. Extract Base64 Image Data
+        const base64Image = data.generated_images[0].image.image_bytes;
+        const imageUrl = 'data:image/jpeg;base64,' + base64Image;
+
+        // 5. Update UI 
+        generatedImage.src = imageUrl;
+        resultSection.style.display = 'block';
+
+        // Optional: Notify Kodular that the image is ready (for logging or other actions)
+        if (window.AppInventor && window.AppInventor.setWebViewString) {
+            window.AppInventor.setWebViewString('IMAGE_GENERATED:' + imageUrl);
+        }
+
+    } catch (error) {
+        // Handle network or API errors
+        console.error("Fetch failed:", error);
+        statusMessage.textContent = `Error: ${error.message}. Please check your API key and network connection.`;
+    } finally {
+        // 6. Reset the button state
+        generateButton.textContent = 'Generate Photo';
+        checkStateAndEnableButton();
+    }
+}
+
+// DELETE the entire 'function encodeAndReturnJson(...)' block
+     function renderStyles() {
+            gallery.innerHTML = ''; 
+            AVAILABLE_STYLES.forEach(style => {
+                const div = document.createElement('div');
+                div.className = 'style-option';
+                div.textContent = style.name;
+                div.dataset.id = style.id;
+                
+                div.addEventListener('click', () => {
+                    selectStyle(style.id);
+                });
+                gallery.appendChild(div);
+            });
+        }
+
+        function selectStyle(styleId) {
+            selectedStyleId = styleId;
+            
+            // Update UI to show selected state
+            document.querySelectorAll('.style-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            const selectedElement = document.querySelector(`.style-option[data-id="${styleId}"]`);
+            if (selectedElement) {
+                selectedElement.classList.add('selected');
+            }
+
+            // Update the prompt input with a base prompt for the chosen style
+            const style = AVAILABLE_STYLES.find(s => s.id === styleId);
+            if (style) {
+                promptInput.value = `A stunning maternity photo in the ${style.name} style, Enhance with: ${style.prompt_suffix}`;
+                promptInput.focus();
+                promptInput.select();
+            }
+            
+            checkStateAndEnableButton();
+        }
+
+        function checkStateAndEnableButton() {
+            // Only require a selected style and a non-empty prompt for generation
+            if (selectedStyleId && promptInput.value.trim().length > 10) { 
+                generateButton.disabled = false;
+            } else {
+                generateButton.disabled = true;
+            }
+        }
+
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                photoUploaded = true;
+                uploadStatus.textContent = `Photo uploaded: ${file.name}`;
+                uploadStatus.style.color = '#007aff';
+            } else {
+                photoUploaded = false;
+                uploadStatus.textContent = 'Click here to upload a photo';
+                uploadStatus.style.color = '#666';
+            }
+            // Note: Handling the uploaded file data for an API call is complex and requires
+            // the Kodular bridge or a hosted solution, so for now, we only use the text prompt.
+            checkStateAndEnableButton();
+        }
+
+       
+		
+	
+        
+
+        function handleDownloadClick() {
+            const imageSource = generatedImage.src;
+            if (imageSource && imageSource.startsWith('data:image')) {
+                // Since the image is a data URL (Base64), downloading directly requires a trick:
+                // Create a temporary link element and click it.
+                const a = document.createElement('a');
+                a.href = imageSource;
+                a.download = 'ai_maternity_photo.jpg'; // Suggested filename
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                statusMessage.textContent = 'Download started!';
+            } else {
+                statusMessage.textContent = 'No generated photo to download.';
+            }
+        }
+
+        // 7. INITIALIZATION FUNCTION
+        function initializeApp() {
+            renderStyles();
+
+            // Attach main event listeners
+            photoInput.addEventListener('change', handlePhotoUpload);
+            // Click event on the container to trigger the hidden file input
+            document.querySelector('.file-upload-container').addEventListener('click', () => {
+                photoInput.click(); 
+            });
+
+            promptInput.addEventListener('input', checkStateAndEnableButton);
+            generateButton.addEventListener('click', handleGenerateClick);
+            downloadButton.addEventListener('click', handleDownloadClick);
+
+            // Initial state check
+            checkStateAndEnableButton();
+            
+            // Optional: Start with the first style selected
+            selectStyle(AVAILABLE_STYLES[0].id); 
+        }
+
+        // --- START THE APPLICATION ---
+        initializeApp();
     </script>
-  </body>
+</body>
 </html>

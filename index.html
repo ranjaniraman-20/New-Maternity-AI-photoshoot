@@ -21,7 +21,7 @@
   <body class="bg-slate-900">
     <div id="root"></div>
     <script type="text/babel" data-type="module">
-      import React, { useState, useCallback } from 'react';
+      import React, { useState, useCallback, useEffect } from 'react';
       import ReactDOM from 'react-dom/client';
       import { GoogleGenAI, Modality } from "@google/genai";
 
@@ -122,9 +122,7 @@
         stylePrompt: string,
         customBackground: string
       ): Promise<string> => {
-        if (!process.env.API_KEY) {
-          throw new Error("API key is missing. Please set the API_KEY environment variable.");
-        }
+        // The API key is injected by the environment after user selection.
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         const finalStylePrompt = customBackground.trim() !== ''
@@ -162,7 +160,8 @@
           }
         } catch (error) {
           console.error("Error generating image with Gemini:", error);
-          throw new Error("Failed to generate image. Please try a different photo or style.");
+          // Propagate the original error message for more specific feedback.
+          throw new Error(error.message || "Failed to generate image. Please try a different photo or style.");
         }
       };
 
@@ -272,11 +271,34 @@
         const [generatedImage, setGeneratedImage] = useState(null);
         const [isLoading, setIsLoading] = useState(false);
         const [error, setError] = useState(null);
+        const [isKeyReady, setIsKeyReady] = useState(false);
+        
+        useEffect(() => {
+          const checkApiKey = async () => {
+            if (window.aistudio) {
+              const hasKey = await window.aistudio.hasSelectedApiKey();
+              setIsKeyReady(hasKey);
+            }
+          };
+          checkApiKey();
+        }, []);
+
+        const handleSelectKey = async () => {
+          if (window.aistudio) {
+            await window.aistudio.openSelectKey();
+            // Assume key selection is successful, per guidelines for race conditions.
+            setIsKeyReady(true);
+          }
+        };
 
         const handleGenerateClick = useCallback(async () => {
           if (!uploadedImage || !selectedStyleId) {
             setError("Please upload a photo and select a style first.");
             return;
+          }
+          if (!isKeyReady) {
+             setError("Please select an API key before generating.");
+             return;
           }
 
           setIsLoading(true);
@@ -290,13 +312,18 @@
             const result = await generateMaternityPhoto(uploadedImage, style.prompt, customBackground);
             setGeneratedImage(result);
           } catch (err) {
-            setError(err.message || "An unexpected error occurred.");
+            if (err.message && err.message.includes("API key not valid")) {
+              setError("API Key error. Please re-select your key and try again.");
+              setIsKeyReady(false); // Reset key state to prompt user again
+            } else {
+              setError(err.message || "An unexpected error occurred.");
+            }
           } finally {
             setIsLoading(false);
           }
-        }, [uploadedImage, selectedStyleId, customBackground]);
+        }, [uploadedImage, selectedStyleId, customBackground, isKeyReady]);
 
-        const isGenerateDisabled = !uploadedImage || !selectedStyleId || isLoading;
+        const isGenerateDisabled = !uploadedImage || !selectedStyleId || isLoading || !isKeyReady;
 
         return (
           <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8 font-sans">
@@ -330,32 +357,59 @@
 
                 <div className="md:sticky md:top-8 flex flex-col gap-6">
                   <ResultCard title="Your Masterpiece">
-                    <div className="min-h-[300px] flex items-center justify-center bg-slate-900/50 rounded-lg p-4">
-                      {isLoading ? (
-                        <Loader />
-                      ) : error ? (
-                        <div className="text-center text-red-400">
-                          <p className="font-bold">Generation Failed</p>
-                          <p className="text-sm">{error}</p>
-                        </div>
-                      ) : generatedImage ? (
-                        <div className="w-full flex flex-col items-center gap-4">
-                          <img src={generatedImage} alt="Generated maternity" className="rounded-lg shadow-2xl max-w-full max-h-96" />
+                    {!isKeyReady ? (
+                       <div className="text-center p-8">
+                        <h3 className="font-semibold text-slate-300 mb-2">API Key Required</h3>
+                        <p className="text-sm text-slate-400 mb-4">
+                          Please select your API key to enable image generation.
+                        </p>
+                        <button
+                          onClick={handleSelectKey}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                        >
+                          Select API Key
+                        </button>
+                        <p className="text-xs text-slate-500 mt-3">
+                          For billing information, see the{' '}
                           <a
-                            href={generatedImage}
-                            download="maternity-muse-photo.png"
-                            className="w-full sm:w-auto text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                            href="https://ai.google.dev/gemini-api/docs/billing"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-indigo-400"
                           >
-                            Download Image
+                            Gemini API documentation
                           </a>
-                        </div>
-                      ) : (
-                        <div className="text-center text-slate-500">
-                          <p className="font-semibold">Your masterpiece will appear here</p>
-                          <p className="text-sm">Complete steps 1 & 2 to get started</p>
-                        </div>
-                      )}
-                    </div>
+                          .
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="min-h-[300px] flex items-center justify-center bg-slate-900/50 rounded-lg p-4">
+                        {isLoading ? (
+                          <Loader />
+                        ) : error ? (
+                          <div className="text-center text-red-400">
+                            <p className="font-bold">Generation Failed</p>
+                            <p className="text-sm">{error}</p>
+                          </div>
+                        ) : generatedImage ? (
+                          <div className="w-full flex flex-col items-center gap-4">
+                            <img src={generatedImage} alt="Generated maternity" className="rounded-lg shadow-2xl max-w-full max-h-96" />
+                            <a
+                              href={generatedImage}
+                              download="maternity-muse-photo.png"
+                              className="w-full sm:w-auto text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                            >
+                              Download Image
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="text-center text-slate-500">
+                            <p className="font-semibold">Your masterpiece will appear here</p>
+                            <p className="text-sm">Complete steps 1 & 2 to get started</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </ResultCard>
 
                   <button
